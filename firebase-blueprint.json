@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user or admin in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin", "driver"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Driver": {
+      "title": "Driver Profile",
+      "description": "Extended profile for drivers in the fleet.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "carInfo": { "type": "string" },
+        "plate": { "type": "string" },
+        "pdpInfo": { "type": "string" },
+        "approved": { "type": "boolean" },
+        "isOnline": { "type": "boolean" },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "approved"]
+    },
+    "Trip": {
+      "title": "Trip Request",
+      "description": "Represents a ride request and its lifecycle.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "driverId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Accepted", "Active", "Finished", "Cancelled"] },
+        "priceStatus": { "type": "string", "enum": ["Fixed", "Proposed", "Accepted", "Rejected"] },
+        "proposedPrice": { "type": "number" },
+        "pickup": { "type": "string" },
+        "destination": { "type": "string" },
+        "price": { "type": "number" },
+        "area": { "type": "string" },
+        "userName": { "type": "string" },
+        "driverName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "status", "pickup", "destination", "price", "createdAt"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "A message within a trip's chat.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    },
+    "Settings": {
+      "title": "App Settings",
+      "description": "Global operational settings managed by admin.",
+      "type": "object",
+      "properties": {
+        "openTime": { "type": "number", "description": "Opening hour (0-23)" },
+        "closeTime": { "type": "number", "description": "Closing hour (0-23)" }
+      },
+      "required": ["openTime", "closeTime"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Main user records including role profile."
+    },
+    "/fleet/{driverId}": {
+      "schema": "Driver",
+      "description": "Drivers' fleet activity and approval status."
+    },
+    "/trips/{tripId}": {
+      "schema": "Trip",
+      "description": "Ride requests and history."
+    },
+    "/trips/{tripId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Real-time chat messages for a specific trip."
+    },
+    "/settings/config": {
+      "schema": "Settings",
+      "description": "Global application settings."
+    },
+    "/admins/{adminId}": {
+       "schema": "User",
+       "description": "Explicit admin list for rule validation."
+    }
+  }
+}

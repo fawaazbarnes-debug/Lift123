@@ -1,0 +1,6 @@
+{
+  "name": "LIFT PRO MAX",
+  "description": "A real-time ride-hailing application with dedicated portals for Users, Drivers, and Admins, featuring live trip tracking, chat, and fleet management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

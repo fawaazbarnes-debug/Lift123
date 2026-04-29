@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isAdmin() { 
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); 
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Entity Validations ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+             data.keys().size() == (data.hasAny(['createdAt']) ? 5 : 4) &&
+             data.uid == request.auth.uid &&
+             data.role in ['user', 'driver', 'admin'] &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100;
+    }
+
+    function isValidDriver(data) {
+      return data.keys().hasAll(['uid', 'name', 'approved']) &&
+             data.uid is string &&
+             data.name is string && data.name.size() <= 100 &&
+             data.approved is bool;
+    }
+
+    function isValidTrip(data) {
+      return data.keys().hasAll(['userId', 'status', 'pickup', 'destination', 'price', 'createdAt']) &&
+             data.userId is string &&
+             data.status in ['Pending', 'Accepted', 'Active', 'Finished', 'Cancelled'] &&
+             data.pickup is string && data.pickup.size() <= 200 &&
+             data.destination is string && data.destination.size() <= 200 &&
+             data.price is number;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'createdAt']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() <= 500;
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming());
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn(); // To check if they are admin
+    }
+
+    match /fleet/{driverId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(driverId) && isValidDriver(incoming());
+      allow update: if (isOwner(driverId) && !incoming().diff(existing()).affectedKeys().hasAny(['approved'])) || isAdmin();
+    }
+
+    match /trips/{tripId} {
+      allow list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.driverId == request.auth.uid || 
+        resource.data.status == 'Pending' || 
+        isAdmin()
+      );
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidTrip(incoming());
+      allow update: if isSignedIn() && (
+        // User cancelling or accepting/rejecting price
+        (existing().userId == request.auth.uid && (
+          (incoming().status == 'Cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+          (incoming().priceStatus in ['Accepted', 'Rejected'] && incoming().diff(existing()).affectedKeys().hasOnly(['priceStatus', 'updatedAt', 'price']))
+        )) ||
+        // Driver accepting (only if pending)
+        (existing().status == 'Pending' && incoming().status == 'Accepted' && incoming().driverId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'driverId', 'driverName', 'updatedAt'])) ||
+        // Driver updating status or proposing price
+        (existing().driverId == request.auth.uid && (
+          (incoming().status in ['Active', 'Finished'] && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+          (incoming().priceStatus == 'Proposed' && incoming().diff(existing()).affectedKeys().hasOnly(['priceStatus', 'proposedPrice', 'updatedAt']))
+        )) ||
+        isAdmin()
+      );
+    }
+
+    match /trips/{tripId}/messages/{messageId} {
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/trips/$(tripId)).data.userId == request.auth.uid ||
+        get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && isValidMessage(incoming()) && (
+        get(/databases/$(database)/documents/trips/$(tripId)).data.userId == request.auth.uid ||
+        get(/databases/$(database)/documents/trips/$(tripId)).data.driverId == request.auth.uid
+      );
+    }
+
+    match /settings/config {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
